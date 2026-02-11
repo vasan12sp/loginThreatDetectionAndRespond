@@ -21,18 +21,7 @@ buildNumber.properties
 .metadata/
 # VS Code
 .vscode/
-# Python
-__pycache__/
-*.py[cod]
-*$py.class
-*.so
-.Python
-venv/
-env/
-ENV/
-*.egg-info/
-dist/
-build/
+
 # Logs
 *.log
 logs/
@@ -40,4 +29,4 @@ logs/
 .DS_Store
 Thumbs.db
 # Application
-application-local.properties
+application.properties
