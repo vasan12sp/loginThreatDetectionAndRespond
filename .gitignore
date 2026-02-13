@@ -30,3 +30,4 @@ logs/
 Thumbs.db
 # Application
 application.properties
+venv/
