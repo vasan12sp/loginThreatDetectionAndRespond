@@ -57,7 +57,7 @@ public class AuthController {
      * Handles proxy headers (X-Forwarded-For, X-Real-IP).
      */
     private String extractIpAddress(HttpServletRequest request) {
-        String ip = request.getHeader("X-Forwarded-For");
+        String ip = request.getRemoteAddr();
         if (ip == null || ip.isEmpty() || "unknown".equalsIgnoreCase(ip)) {
             ip = request.getHeader("X-Real-IP");
         }

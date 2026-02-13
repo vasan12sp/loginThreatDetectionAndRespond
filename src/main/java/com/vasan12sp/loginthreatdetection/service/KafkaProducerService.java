@@ -30,7 +30,7 @@ public class KafkaProducerService {
             String jsonMessage = objectMapper.writeValueAsString(event);
 
             // Fire and Forget - async send
-            kafkaTemplate.send(TOPIC, jsonMessage)
+            kafkaTemplate.send(TOPIC, event.getIp(), jsonMessage)
                 .whenComplete((result, ex) -> {
                     if (ex != null) {
                         log.error("Failed to send event to Kafka for IP: {}", event.getIp(), ex);
