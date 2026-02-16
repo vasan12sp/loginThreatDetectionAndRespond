@@ -1,189 +1,251 @@
 
 # Real-Time Threat Detection and Response System
 
-A production-style, event-driven authentication security system that detects and automatically mitigates brute-force attacks and suspicious login behavior in real time using Spring Boot, Kafka, Python, and PostgreSQL.
-
-This project demonstrates modern security engineering practices including asynchronous event streaming, sliding-window threat detection, and automated response enforcement.
+> Production-grade authentication security system with real-time ML anomaly detection, rule-based threat detection, and automated mitigation using Kafka, Spring Boot, Python, and PostgreSQL.
 
 ---
 
-# Key Highlights
+## System Overview
 
-* Detects brute-force attacks in real time using sliding window analysis
-* Automatically blocks malicious IPs without human intervention
+This project implements a real-time authentication security pipeline that detects and blocks malicious login attempts using both deterministic detection logic and machine learning–based behavioral anomaly detection.
+
+The system uses an event-driven architecture powered by Apache Kafka to ensure scalability, low latency, and fault tolerance.
+
+---
+
+## Key Features
+
+* Real-time brute force attack detection
+* Machine learning anomaly detection using Isolation Forest
+* Automatic malicious IP blocking
 * Event-driven architecture using Apache Kafka
-* Low-latency authentication with asynchronous threat analysis
-* Fully decoupled detection and enforcement pipeline
-* Horizontally scalable security monitoring design
+* Behavioral feature engineering for security analytics
+* Fully asynchronous detection pipeline
+* Horizontally scalable architecture
+* Production-style threat detection and response
 
 ---
 
-# Architecture Overview
+## Architecture Diagram
 
 ```
-Client
-   │
-   ▼
-Spring Boot Auth Service
-(Authentication + Enforcement)
-   │
-   ├── Checks blocked IPs (PostgreSQL)
-   │
-   └── Publishes login events
-        │
-        ▼
-     Kafka Topic
-     "auth-events"
-        │
-        ▼
-Threat Detection Engine (Python)
-   │
-   ├── Sliding window brute-force detection
-   ├── Impossible travel detection
-   ├── Rapid IP switching detection
-   │
-   ▼
-PostgreSQL blocked_ips table
-   │
-   ▼
-Auth Service enforces block (403 response)
-```
+                        ┌──────────────────────┐
+                        │        Client        │
+                        └──────────┬───────────┘
+                                   │
+                                   ▼
+                    ┌────────────────────────────┐
+                    │ Spring Boot Auth Service   │
+                    │                            │
+                    │ • Authentication           │
+                    │ • Enforcement              │
+                    │ • Kafka Producer           │
+                    └──────────┬──────────────── ┘
+                               │
+                               ▼
+                      ┌───────────────────┐
+                      │   Kafka Topic     │
+                      │   "auth-events"   │
+                      └─────────┬─────────┘
+                                │
+              ┌─────────────────┴─────────────────┐
+              │                                   │
+              ▼                                   ▼
 
----
-
-# System Components
-
-## 1. Authentication Service (Spring Boot)
-
-Responsibilities:
-
-* Processes login requests
-* Extracts client IP address
-* Enforces blocked IP restrictions
-* Publishes login events asynchronously to Kafka
-* Returns authentication response with minimal latency
-
-Endpoint:
-
-```
-POST /api/auth/login
-```
-
-Health check:
-
-```
-GET /api/auth/health
-```
-
-Example response:
-
-```json
-{
-  "success": false,
-  "message": "Access Denied: Temporarily Blocked",
-  "ip": "192.168.1.10",
-  "timestamp": 1700000000000
-}
+   ┌───────────────────────────┐     ┌────────────────────────────┐
+   │ Rule-Based Detection      │     │ ML Anomaly Detection       │
+   │ Engine (Python)           │     │ Engine (Python)            │
+   │                           │     │                            │
+   │ • Sliding Window          │     │ • Feature Engineering      │
+   │ • Impossible Travel       │     │ • Isolation Forest Model   │
+   │ • Rapid IP Switching      │     │ • Behavioral Analysis      │
+   └──────────────┬────────── ─┘     └──────────────┬─────────────┘
+                  │                                 │
+                  └──────────────┬──────────────── ─┘
+                                 ▼
+                      ┌────────────────────────┐
+                      │     PostgreSQL         │
+                      │     blocked_ips        │
+                      └──────────┬───────────  ┘
+                                 │
+                                 ▼
+                    ┌─────────────────────────┐
+                    │  Auth Service enforces  │
+                    │  Block (HTTP 403)       │
+                    └─────────────────────────┘
 ```
 
 ---
 
-## 2. Event Streaming Layer (Apache Kafka)
-
-Purpose:
-
-Decouples authentication from threat detection.
-
-Benefits:
-
-* Non-blocking authentication flow
-* High throughput event ingestion
-* Fault tolerant and scalable
-
-Event format:
-
-```json
-{
-  "ip": "192.168.1.10",
-  "status": "FAILURE",
-  "timestamp": "2026-01-01T10:00:00Z",
-  "username": "admin"
-}
-```
-
-Topic:
+## Event Flow Diagram
 
 ```
-auth-events
+Login Attempt
+     │
+     ▼
+Auth Service receives request
+     │
+     ├── Checks blocked_ips table
+     │
+     └── Publishes event → Kafka
+                         │
+                         ▼
+                Detection Engines consume event
+                         │
+           ┌─────────────┴─────────────┐
+           ▼                           ▼
+    Rule-Based Detection        ML Detection
+           │                           │
+           └─────────────┬─────────────┘
+                         ▼
+                 Block malicious IP
+                         │
+                         ▼
+                Auth Service enforces block
 ```
 
 ---
 
-## 3. Threat Detection Engine (Python)
-
-Consumes Kafka events and analyzes login patterns in real time.
-
-Detection techniques implemented:
-
-### Brute Force Detection
-
-Detects excessive failed login attempts using sliding window algorithm.
-
-Logic:
-
-* Tracks failed attempts per IP
-* Threshold: >5 failures within 60 seconds
-* Automatically blocks IP
-
-Time complexity:
+## Machine Learning Architecture
 
 ```
-O(n) per IP within time window
+                Historical Login Logs
+                         │
+                         ▼
+                Feature Engineering
+                         │
+                         ▼
+                Isolation Forest Training
+                         │
+                         ▼
+                anomaly_model.pkl
+                         │
+                         ▼
+                Real-Time Kafka Events
+                         │
+                         ▼
+                Feature Engineering
+                         │
+                         ▼
+                Isolation Forest Prediction
+                         │
+                         ▼
+                Anomaly → Block IP
 ```
-
-Memory efficient sliding window implementation.
 
 ---
 
-### Impossible Travel Detection
+## Technology Stack
 
-Detects logins from geographically impossible locations within short time.
+### Backend
 
-Uses:
+* Java 17
+* Spring Boot
+* Spring Kafka
 
-* Haversine distance calculation
-* Travel speed threshold validation
+### Machine Learning
+
+* Python 3
+* scikit-learn
+* Isolation Forest
+* joblib
+
+### Data Streaming
+
+* Apache Kafka
+
+### Database
+
+* PostgreSQL
+
+### Python Libraries
+
+* kafka-python
+* psycopg2
+* scikit-learn
+* joblib
+
+---
+
+## Detection Methods Implemented
+
+### Rule-Based Detection
+
+Sliding Window Brute Force Detection
+
+```
+Threshold: > 5 failed attempts within 60 seconds
+```
+
+Impossible Travel Detection
+
+```
+Detects geographically impossible login locations
+```
+
+Rapid IP Switching Detection
+
+```
+Detects proxy hopping and bot behavior
+```
+
+---
+
+### Machine Learning Detection
+
+Model Used:
+
+```
+Isolation Forest
+```
+
+Features Engineered:
+
+```
+failures_per_ip
+attempt_count_ip
+unique_users_per_ip
+failure_rate
+delta_t
+hour_of_day
+```
 
 Detects:
 
-* Credential compromise
-* Account hijacking
+* Unknown attacks
+* Bot attacks
+* Credential stuffing
+* Account takeover behavior
+* Behavioral anomalies
 
 ---
 
-### Rapid IP Switching Detection
+## Behavioral Feature Engineering
 
-Detects suspicious IP changes for same user within short duration.
+Example:
 
-Detects:
+Normal user:
 
-* Proxy hopping
-* Bot activity
-* Session abuse
+```
+failures_per_ip = 1
+failure_rate = 0.1
+```
+
+Attacker:
+
+```
+failures_per_ip = 50
+failure_rate = 1.0
+unique_users_per_ip = 20
+```
+
+ML model detects attacker as anomaly.
 
 ---
 
-## 4. Automated Threat Response
+## Database Schema
 
-When a threat is detected:
-
-* IP is inserted into PostgreSQL blocked_ips table
-* Block duration automatically enforced
-* Future login attempts rejected immediately
-
-Database schema:
-
-```sql
+```
 CREATE TABLE blocked_ips (
     ip_address TEXT PRIMARY KEY,
     blocked_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -194,100 +256,24 @@ CREATE TABLE blocked_ips (
 
 ---
 
-# Technology Stack
+## Event Format
 
-Backend:
-
-* Java 17
-* Spring Boot
-* Spring Kafka
-
-Threat Detection:
-
-* Python 3
-* kafka-python
-* psycopg2
-
-Data Layer:
-
-* PostgreSQL
-
-Event Streaming:
-
-* Apache Kafka
-
-Serialization:
-
-* Jackson
+```
+{
+  "ip": "192.168.1.10",
+  "username": "admin",
+  "status": "FAILURE",
+  "timestamp": "2026-01-01T10:00:00Z"
+}
+```
 
 ---
 
-# Key Engineering Concepts Demonstrated
 
-Event-Driven Architecture
-Asynchronous Processing
-Distributed Systems Design
-Security Threat Detection
-Sliding Window Algorithms
-Automated Threat Response
-Microservice Decoupling
-Kafka Event Streaming
-Real-Time Data Processing
 
----
+## How to Run
 
-# Performance Characteristics
-
-Authentication latency:
-
-```
-5–20 ms
-```
-
-Threat detection latency:
-
-```
-< 500 ms
-```
-
-System scalability:
-
-```
-Supports horizontal scaling via Kafka partitioning
-```
-
-Authentication service remains fast even under attack due to async design.
-
----
-
-# Security Design Pattern
-
-This system follows industry standard Threat Detection and Response (TDR) architecture:
-
-Detection Layer:
-
-* Event analysis
-* Behavior monitoring
-
-Response Layer:
-
-* Automated mitigation
-* Real-time enforcement
-
-This architecture is used in:
-
-* Banking systems
-* Identity providers
-* Cloud authentication platforms
-* Enterprise security systems
-
----
-
-# How to Run
-
-## Start Kafka
-
-Ensure Kafka is running on:
+### Start Kafka
 
 ```
 localhost:9092
@@ -295,62 +281,50 @@ localhost:9092
 
 ---
 
-## Setup PostgreSQL
+### Setup PostgreSQL
 
-Create database:
-
-```sql
+```
 CREATE DATABASE security_db;
 ```
 
-Create table:
-
-```sql
+```
 CREATE TABLE blocked_ips (
-    ip_address TEXT PRIMARY KEY,
-    blocked_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    blocked_until TIMESTAMP NOT NULL,
-    reason TEXT
+ ip_address TEXT PRIMARY KEY,
+ blocked_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+ blocked_until TIMESTAMP NOT NULL,
+ reason TEXT
 );
 ```
 
 ---
 
-## Run Spring Boot Auth Service
+### Run Auth Service
 
-```bash
+```
 mvn spring-boot:run
-```
-
-Runs on:
-
-```
-http://localhost:8080
 ```
 
 ---
 
-## Run Threat Detection Engine
+### Run Rule-Based Engine
 
-Install dependencies:
-
-```bash
-pip install kafka-python psycopg2-binary
 ```
-
-Run:
-
-```bash
 python threat_monitor.py
 ```
 
 ---
 
-# Example Attack Simulation
+### Run ML Detection Engine
 
-Send multiple failed login attempts:
+```
+python ml_threat_detection_engine.py
+```
 
-```bash
+---
+
+## Example Attack Simulation
+
+```
 curl -X POST http://localhost:8080/api/auth/login \
 -H "Content-Type: application/json" \
 -d '{"username":"admin","password":"wrong"}'
@@ -358,30 +332,34 @@ curl -X POST http://localhost:8080/api/auth/login \
 
 Result:
 
-* Threat detection engine detects brute force
-* IP automatically blocked
-* Future requests receive HTTP 403
+```
+IP automatically blocked
+Future requests return HTTP 403
+```
 
 ---
 
-# Scalability Design
+## Scalability Model
 
-This system supports horizontal scaling:
+```
+Kafka
+ ├── Detection Engine Instance 1
+ ├── Detection Engine Instance 2
+ ├── Detection Engine Instance 3
+ └── Detection Engine Instance N
+```
 
-* Kafka partitions allow multiple detection consumers
-* Authentication service remains stateless
-* Detection engine can scale independently
-* Database acts as enforcement source of truth
+Horizontal scaling supported.
 
 ---
 
-# Real-World Applications
+## Real-World Applications
 
-* Authentication systems
-* Enterprise identity providers
-* API security platforms
-* Banking login protection
-* SOC threat monitoring systems
+* Identity Providers
+* Banking Authentication Systems
+* Enterprise Security Systems
+* Cloud Authentication Platforms
+* SOC Threat Detection Systems
 
 
 
