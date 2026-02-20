@@ -54,7 +54,7 @@ class MLThreatDetectionEngine:
         self.model = joblib.load(MODEL_PATH)
 
 
-        print("✅ ML model loaded")
+        print("ML model loaded")
 
         # Kafka Consumer
         self.consumer = KafkaConsumer(
@@ -92,10 +92,10 @@ class MLThreatDetectionEngine:
 
         try:
             self.db_conn = psycopg2.connect(**DB_CONFIG)
-            print("✅ Connected to PostgreSQL")
+            print("Connected to PostgreSQL")
 
         except Exception as e:
-            print("❌ DB connection failed:", e)
+            print("DB connection failed:", e)
             raise
 
 
