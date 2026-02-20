@@ -38,6 +38,8 @@ DB_CONFIG = {
 
 BLOCK_DURATION_MINUTES = 30
 
+STATE_EXPIRY_SECONDS = 3600
+
 
 # =============================
 # ML Threat Detection Engine
@@ -62,7 +64,7 @@ class MLThreatDetectionEngine:
             bootstrap_servers=KAFKA_BROKER,
             group_id=KAFKA_GROUP_ID,
             auto_offset_reset='latest',
-            enable_auto_commit=True,
+            enable_auto_commit=False,
             value_deserializer=lambda m: json.loads(m.decode('utf-8'))
         )
 
@@ -115,15 +117,14 @@ class MLThreatDetectionEngine:
 
         state = self.ip_state[ip]
 
-        now = time.time()
-
-        # delta_t calculation
+        event_ts = datetime.fromisoformat(timestamp).timestamp()
+        
         if state["last_timestamp"] is None:
             delta_t = 0
         else:
-            delta_t = now - state["last_timestamp"]
-
-        state["last_timestamp"] = now
+            delta_t = event_ts - state["last_timestamp"]
+        
+        state["last_timestamp"] = event_ts
 
         # Update attempts
         state["attempts"] += 1
@@ -191,6 +192,10 @@ class MLThreatDetectionEngine:
 
     def block_ip(self, ip):
 
+        if self.is_ip_blocked(ip):
+            print(f"IP {ip} already blocked, skipping")
+            return
+
         try:
 
             cursor = self.db_conn.cursor()
@@ -212,11 +217,11 @@ class MLThreatDetectionEngine:
             self.db_conn.commit()
             cursor.close()
 
-            print(f"🚫 BLOCKED {ip} until {blocked_until}")
+            print(f"BLOCKED {ip} until {blocked_until}")
 
         except Exception as e:
 
-            print("❌ Failed to block IP:", e)
+            print("Failed to block IP:", e)
             self.db_conn.rollback()
 
 
@@ -232,7 +237,8 @@ class MLThreatDetectionEngine:
 
                 event = message.value
 
-                self.analyze_event(event)
+                self.consumer.commit()
+                
 
             except Exception as e:
 
@@ -252,6 +258,37 @@ class MLThreatDetectionEngine:
             self.db_conn.close()
 
         print("Shutdown complete")
+
+    def is_ip_blocked(self, ip):
+    
+        cursor = self.db_conn.cursor()
+    
+        cursor.execute("""
+            SELECT blocked_until
+            FROM blocked_ips
+            WHERE ip_address = %s
+            AND blocked_until > CURRENT_TIMESTAMP
+        """, (ip,))
+    
+        result = cursor.fetchone()
+    
+        cursor.close()
+    
+        return result is not None
+
+
+    def cleanup_old_state(self):
+    
+        now = time.time()
+    
+        expired = [
+            ip for ip, state in self.ip_state.items()
+            if state["last_timestamp"]
+            and now - state["last_timestamp"] > STATE_EXPIRY_SECONDS
+        ]
+    
+        for ip in expired:
+            del self.ip_state[ip]
 
 
 # =============================
@@ -277,6 +314,9 @@ def main():
     finally:
 
         engine.cleanup()
+
+
+
 
 
 if __name__ == "__main__":
