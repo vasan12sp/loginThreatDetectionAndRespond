@@ -58,9 +58,9 @@ class ThreatDetectionEngine:
         """Establish PostgreSQL connection."""
         try:
             self.db_conn = psycopg2.connect(**DB_CONFIG)
-            print("✅ Connected to PostgreSQL")
+            print("Connected to PostgreSQL")
         except Exception as e:
-            print(f"❌ Database connection failed: {e}")
+            print(f"Database connection failed: {e}")
             raise
     def process_events(self):
         """
@@ -72,7 +72,7 @@ class ThreatDetectionEngine:
                 event = message.value
                 self.analyze_event(event)
             except Exception as e:
-                print(f"❌ Error processing event: {e}")
+                print(f"Error processing event: {e}")
     def analyze_event(self, event):
         """
         Analyze a single login event using sliding window algorithm.
@@ -118,14 +118,14 @@ class ThreatDetectionEngine:
                         speed_kmh = float('inf') if hours == 0 else distance_km / hours
                         MAX_TRAVEL_SPEED_KMH = 500  # threshold; adjust per policy
                         if speed_kmh > MAX_TRAVEL_SPEED_KMH:
-                            print(f"   ⚠️ IMPOSSIBLE TRAVEL detected for user '{username}': {distance_km:.1f} km in {dt:.1f}s (~{speed_kmh:.1f} km/h). Blocking IP {ip}.")
+                            print(f"   IMPOSSIBLE TRAVEL detected for user '{username}': {distance_km:.1f} km in {dt:.1f}s (~{speed_kmh:.1f} km/h). Blocking IP {ip}.")
                             self.block_ip(ip)
                             # still update last-success and reset failure counters for IP
                     else:
                         # Fallback heuristic: different IPs within a short window -> suspicious
                         MIN_IP_SWITCH_SECONDS = 60  # if the same user logs in from two IPs within this window
                         if last.get('ip') and last.get('ip') != ip and dt < MIN_IP_SWITCH_SECONDS:
-                            print(f"   ⚠️ QUICK IP SWITCH detected for user '{username}': {last.get('ip')} -> {ip} in {dt:.1f}s. Blocking IP {ip}.")
+                            print(f"   QUICK IP SWITCH detected for user '{username}': {last.get('ip')} -> {ip} in {dt:.1f}s. Blocking IP {ip}.")
                             self.block_ip(ip)
             # Update last successful login for the user
             self.last_success_by_user[username] = {'ip': ip, 'ts': now, 'lat': lat, 'lon': lon}
@@ -133,7 +133,7 @@ class ThreatDetectionEngine:
             # Reset the sliding window for this IP (do not penalize a successful login)
             if ip in self.failed_attempts:
                 del self.failed_attempts[ip]
-                print(f"   ℹ️ {ip}: SUCCESS — reset failure counter")
+                print(f"   {ip}: SUCCESS — reset failure counter")
             return
 
         # Only track failures from here onwards
@@ -148,10 +148,10 @@ class ThreatDetectionEngine:
             if current_time - t < TIME_WINDOW_SECONDS
         ]
         failure_count = len(self.failed_attempts[ip])
-        print(f"   💡 {ip}: {failure_count} failures in last {TIME_WINDOW_SECONDS}s")
+        print(f"   {ip}: {failure_count} failures in last {TIME_WINDOW_SECONDS}s")
         # CHECK THRESHOLD
         if failure_count > FAILURE_THRESHOLD:
-            print(f"   🚨 THREAT DETECTED! Blocking {ip}")
+            print(f"  THREAT DETECTED! Blocking {ip}")
             self.block_ip(ip)
             # Clear memory for this IP to avoid re-blocking immediately
             del self.failed_attempts[ip]
@@ -180,9 +180,9 @@ class ThreatDetectionEngine:
 
             self.db_conn.commit()
             cursor.close()
-            print(f"   🚫 BLOCKED {ip} until {blocked_until.strftime('%Y-%m-%d %H:%M:%S')}")
+            print(f"   BLOCKED {ip} until {blocked_until.strftime('%Y-%m-%d %H:%M:%S')}")
         except Exception as e:
-            print(f"   ❌ Failed to block IP {ip}: {e}")
+            print(f"   Failed to block IP {ip}: {e}")
             self.db_conn.rollback()
 
     def revoke_sessions_for_ip(self, cursor, ip):
@@ -232,7 +232,7 @@ def main():
     try:
         engine.process_events()
     except KeyboardInterrupt:
-        print("\n⚠️  Shutdown signal received...")
+        print("\n  Shutdown signal received...")
     finally:
         engine.cleanup()
 if __name__ == "__main__":
