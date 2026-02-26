@@ -15,6 +15,8 @@ The system uses an event-driven architecture powered by Apache Kafka to ensure s
 
 ## Key Features
 
+* **Session-based authentication** with Spring Security + Spring Session JDBC
+* **Automatic session revocation** when an IP is blocked by threat detection
 * Real-time brute force attack detection
 * Machine learning anomaly detection using Isolation Forest
 * Automatic malicious IP blocking
@@ -23,6 +25,8 @@ The system uses an event-driven architecture powered by Apache Kafka to ensure s
 * Fully asynchronous detection pipeline
 * Horizontally scalable architecture
 * Production-style threat detection and response
+* BCrypt password hashing for secure credential storage
+* Database-backed sessions for cross-service session revocation
 
 ---
 
@@ -37,7 +41,9 @@ The system uses an event-driven architecture powered by Apache Kafka to ensure s
                     ┌────────────────────────────┐
                     │ Spring Boot Auth Service   │
                     │                            │
-                    │ • Authentication           │
+                    │ • Spring Security Auth     │
+                    │ • Session Management       │
+                    │ • Blocked IP Filter        │
                     │ • Enforcement              │
                     │ • Kafka Producer           │
                     └──────────┬──────────────── ┘
@@ -85,7 +91,11 @@ Login Attempt
      ▼
 Auth Service receives request
      │
-     ├── Checks blocked_ips table
+     ├── BlockedIpSessionFilter checks blocked_ips table
+     │   └── If blocked → Invalidate session → Return 403
+     │
+     ├── Spring Security authenticates (BCrypt)
+     │   └── On success → Create session → Store in DB
      │
      └── Publishes event → Kafka
                          │
@@ -100,8 +110,12 @@ Auth Service receives request
                          ▼
                  Block malicious IP
                          │
-                         ▼
-                Auth Service enforces block
+                         ├── Insert into blocked_ips
+                         └── Revoke sessions (SPRING_SESSION + user_sessions)
+                                     │
+                                     ▼
+                         Auth Service enforces block on next request
+                         (BlockedIpSessionFilter invalidates session)
 ```
 
 ---
@@ -141,6 +155,8 @@ Auth Service receives request
 
 * Java 17
 * Spring Boot
+* Spring Security (Session-Based Authentication)
+* Spring Session JDBC (Database-Backed Sessions)
 * Spring Kafka
 
 ### Machine Learning
@@ -245,13 +261,34 @@ ML model detects attacker as anomaly.
 
 ## Database Schema
 
-```
+```sql
+-- Blocked IPs with TTL
 CREATE TABLE blocked_ips (
     ip_address TEXT PRIMARY KEY,
     blocked_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     blocked_until TIMESTAMP NOT NULL,
     reason TEXT
 );
+
+-- Users with BCrypt hashed passwords
+CREATE TABLE users (
+    id SERIAL PRIMARY KEY,
+    username VARCHAR(100) UNIQUE NOT NULL,
+    password VARCHAR(255) NOT NULL,
+    enabled BOOLEAN DEFAULT TRUE,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Session tracking (links sessions to IPs for revocation)
+CREATE TABLE user_sessions (
+    session_id VARCHAR(255) PRIMARY KEY,
+    username VARCHAR(100) NOT NULL,
+    ip_address VARCHAR(50) NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Spring Session JDBC tables (SPRING_SESSION, SPRING_SESSION_ATTRIBUTES)
+-- Auto-managed by Spring Session
 ```
 
 ---
@@ -287,13 +324,16 @@ localhost:9092
 CREATE DATABASE security_db;
 ```
 
+Run the `init.sql` script to create all tables:
+
 ```
-CREATE TABLE blocked_ips (
- ip_address TEXT PRIMARY KEY,
- blocked_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
- blocked_until TIMESTAMP NOT NULL,
- reason TEXT
-);
+psql -U admin -d security_db -f init.sql
+```
+
+Or use Docker Compose (auto-runs `init.sql`):
+
+```
+docker-compose up -d
 ```
 
 ---
@@ -322,6 +362,50 @@ python ml_threat_detection_engine.py
 
 ---
 
+## API Endpoints
+
+```
+POST /api/auth/login      - Authenticate and create session (public)
+POST /api/auth/logout     - Invalidate session (authenticated)
+POST /api/auth/register   - Register new user (public)
+GET  /api/auth/health     - Health check (public)
+GET  /api/auth/session-info - Get current session info (authenticated)
+```
+
+---
+
+## Example Usage
+
+### Register a new user
+
+```
+curl -X POST http://localhost:8080/api/auth/register \
+-H "Content-Type: application/json" \
+-d '{"username":"testuser","password":"securepass123"}'
+```
+
+### Login (creates session)
+
+```
+curl -c cookies.txt -X POST http://localhost:8080/api/auth/login \
+-H "Content-Type: application/json" \
+-d '{"username":"admin","password":"admin123"}'
+```
+
+### Check session
+
+```
+curl -b cookies.txt http://localhost:8080/api/auth/session-info
+```
+
+### Logout
+
+```
+curl -b cookies.txt -X POST http://localhost:8080/api/auth/logout
+```
+
+---
+
 ## Example Attack Simulation
 
 ```
@@ -333,7 +417,8 @@ curl -X POST http://localhost:8080/api/auth/login \
 Result:
 
 ```
-IP automatically blocked
+IP automatically blocked after threshold exceeded
+All active sessions for the IP are revoked
 Future requests return HTTP 403
 ```
 

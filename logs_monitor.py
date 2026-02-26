@@ -174,12 +174,48 @@ class ThreatDetectionEngine:
                     blocked_at = CURRENT_TIMESTAMP,
                     reason = EXCLUDED.reason;
             """, (ip, blocked_until))
+
+            # Revoke all active sessions for this IP
+            self.revoke_sessions_for_ip(cursor, ip)
+
             self.db_conn.commit()
             cursor.close()
             print(f"   🚫 BLOCKED {ip} until {blocked_until.strftime('%Y-%m-%d %H:%M:%S')}")
         except Exception as e:
             print(f"   ❌ Failed to block IP {ip}: {e}")
             self.db_conn.rollback()
+
+    def revoke_sessions_for_ip(self, cursor, ip):
+        """
+        Revoke all active sessions for a blocked IP.
+        Deletes from both SPRING_SESSION and user_sessions tables.
+        """
+        try:
+            # Find all session IDs for this IP
+            cursor.execute(
+                "SELECT session_id FROM user_sessions WHERE ip_address = %s", (ip,)
+            )
+            sessions = cursor.fetchall()
+
+            if sessions:
+                session_ids = [s[0] for s in sessions]
+                print(f"   🔒 Revoking {len(session_ids)} session(s) for IP {ip}")
+
+                # Delete from Spring Session table
+                for sid in session_ids:
+                    cursor.execute(
+                        "DELETE FROM SPRING_SESSION WHERE SESSION_ID = %s", (sid,)
+                    )
+
+                # Delete from user_sessions tracking table
+                cursor.execute(
+                    "DELETE FROM user_sessions WHERE ip_address = %s", (ip,)
+                )
+                print(f"   ✅ Sessions revoked for IP {ip}")
+            else:
+                print(f"   ℹ️ No active sessions found for IP {ip}")
+        except Exception as e:
+            print(f"   ⚠️ Failed to revoke sessions for IP {ip}: {e}")
     def cleanup(self):
         """Close connections gracefully."""
         if self.consumer:
